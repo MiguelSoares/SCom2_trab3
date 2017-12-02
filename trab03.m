@@ -2,7 +2,7 @@
 % Diogo Correia (dv.correia@ua.pt)
 
 close all; clear; clc;
-savePlots = 0; % '1' to save plots
+savePlots = 1; % '1' to save plots
 
 % 2. QAM Signal ----------------------------------------------------------
 % 2.1 --------------------------------------------------------------------
@@ -192,7 +192,7 @@ points = [A((2:3).*n) ; B((2:3).*n)];
 
 fprintf('\nVerifica-se comparando com a constelação:');
 fprintf('\nConstelation = (A , B)\n');
-disp('        sym1        sym2');
+disp('        sym2        sym2');
 disp(['A :     ',num2str(points(1,:))]);
 disp(['B :     ',num2str(points(2,:))]);
 
@@ -245,7 +245,7 @@ title('PSD - phase component baseband');
 axis([0 1.2 0 60]); grid on;
 
 % f.2) --------------------------------------------------------------------
-% <insert explanation here>
+% <insert text here>
 
 % f.3) --------------------------------------------------------------------
 hold on;
@@ -258,7 +258,7 @@ if savePlots == 1
 end
 
 % f.4) --------------------------------------------------------------------
-% <insert something here>
+% <insert text here>
 
 % g) ----------------------------------------------------------------------
 figure('Name','DEP E component baseband');
@@ -324,17 +324,17 @@ if savePlots == 1
 end
 
 %% 3. System performance --------------------------------------------------
-%% 3.1 --------------------------------------------------------------------
-close all; clear; clc;
+% 3.1 --------------------------------------------------------------------
+close all; clearvars -except savePlots; clc;
 
 n = 1000;       % Number of symbols to simulate   
 d = 2;          % Difference between consecutive levels in the baseband modulating signals
 M = 4;
 
 map = [-1 -1 0 0 ;
-       -1 1 0 1 ; 
-       1 1 1 1 ; 
-       1 -1 1 0];
+       -1  1 0 1 ; 
+        1  1 1 1 ; 
+        1 -1 1 0];
 
 % 3.2 ---------------------------------------------------------------------
 % a) ----------------------------------------------------------------------   
@@ -349,33 +349,40 @@ for i = 1:n
     binary(i,:) = map(dsource(i),3:4);
 end
 
+d = 5.5;
 Es = (d^2)/2;
-dv = 5.5;
-
 Pes = 10e-4;
-n0 = Es/(2*(erfcinv((-sqrt(-Pes+1)+1)*2))^2);
+n0 = Es/(2*((erfcinv((-sqrt(-Pes+1)+1)*2))^2));
+n0 = 10*log10(n0/1e-3);
 
 disp(['Energy per symbol = ',num2str(Es)]);
 disp(['Noise Power = ',num2str(n0)]);
 disp(['Pes = ',num2str(Pes)]);
 
-noise = wgn(n,2,10*log10(n0));
-qamt = qam.*(dv/2);
+% b) ----------------------------------------------------------------------
+
+Pnoise = (10^(n0/10))/1000; % noise power (W/Hz)
+noise = wgn(n,2,10*log10(Pnoise/2));
+qamt = qam.*(d/2);
 
 r = qamt + noise;
 
-% b) ----------------------------------------------------------------------
-figure; hold on; grid on;
+figure; hold on; grid minor;
 scatter(r(:,1),r(:,2),3,'r','filled');
 scatter(qamt(:,1),qamt(:,2),25,'b','filled');
-%axis([-1.5 1.5 -1.5 1.5]);
 xlabel('A'); ylabel('B');
 title('4-QAM Constelation');
 
 % Centering the axis on origin
-ax = gca;
-ax.XAxisLocation = 'origin';
-ax.YAxisLocation = 'origin';
+try
+    ax = gca;
+    ax.XAxisLocation = 'origin';
+    ax.YAxisLocation = 'origin';
+catch
+    warning('Your version of matlab migth not have the centering axis functions, so they will not run. They will be substituted with blue lines!');
+    plot([-4 4],[0 0],'b');
+    plot([0 0],[-4 4],'b');
+end
 
 % Naming the quadrant binarys
 ylim = get(gca,'ylim');
@@ -385,20 +392,74 @@ text(xlim(1),ylim(2),'[0,1]','Color','b','FontSize',14);
 text(xlim(2),ylim(2),'[1,1]','Color','b','FontSize',14)
 text(xlim(2),ylim(1),'[1,0]','Color','b','FontSize',14);
 
-% c) ----------------------------------------------------------------------
-Es = (M-1)*(d^2)/6;
-n0 = mean(noise(1,:).^2+noise(2,:).^2);
-Pes = 1 - (1-1/2*erfcinv(sqrt(Es/(2*n0))))^2;
+% Save plot
+if savePlots == 1
+    saveas(gcf,'plots/3.2-constelation.png');
+end
 
-disp(['Energy per symbol = ',num2str(Es)]);
-disp(['Averange noise Power = ',num2str(n0)]);
-disp(['Pes = ',num2str(Pes)]);
+% c) ----------------------------------------------------------------------
+Es_wn = 1/n *sum(qam(1,:).^2+qam(2,:).^2);
+Eb_wn = Es_wn/log2(M);
+Pes_p = (1-(1-0.5*erfc(sqrt(Es_wn/(2*Pnoise))))^2);
+
+fprintf('\n*************** 4-QAM System ****************\n');
+fprintf('Distance between the constellation points: %g\n',d);
+fprintf('Average energy per symbol: %g\n',Es_wn);
+fprintf('Average energy per bit, without noise: %g\n',Eb_wn);
+fprintf('Theoretical probability of symbol error: %g\n',Pes);
+fprintf('Pratical probability of symbol error: %g\n',Pes_p);
 
 % d) ----------------------------------------------------------------------
-j = zeros(1,3);
+figure; hold on; grid on ;
+
+% Symbols at the output of the QAM transmitter
+scatter(qamt(1:3,1),qamt(1:3,2),30,'b','filled');
+
+% Symbols at the input of the receiver
+scatter(r(1:3,1),r(1:3,2),25,'r','filled');
 
 % Optimum QAM receiver
+Ei = [qamt(:,1).^2+qamt(:,2).^2] * ones(1,n);
+comp = qamt(:,1)*r(:,1)' + qamt(:,2)*r(:,2)' - Ei/2;
+[x, idx] = max(comp);
+qamr = [qamt(idx,1) qamt(idx,2)];
+
+scatter(qamr(1:3,1),qamr(1:3,2),10,'g','filled');
+
+% Labeling the points
+for i = 1 : 3
+    % Symbols at the output of the QAM transmitter
+    text(qamt(i,1),qamt(i,2),['  ',int2str(i)],'Color','b');
+    % Symbols at the input of the receiver
+    text(r(i,1),r(i,2),['  ',int2str(i)],'Color','r');
+    % output of Optimum QAM receiver
+    text(qamr(i,1),qamr(i,2),['  ',int2str(i)],'Color','g');
+end
+
+legend('output of the QAM transmitter','input of the receiver','output of Optimum QAM receiver');
+axis([-6 6 -6 6]);
+xlabel('Phase component'); ylabel('Quadrature component');
+title('QAM singal Path');
+
+try
+    ax = gca;
+    ax.XAxisLocation = 'origin';
+    ax.YAxisLocation = 'origin';
+catch
+    warning('Your version of matlab migth not have the centering axis functions, so they will not run. They will be substituted with blue lines!');
+    plot([-4 4],[0 0],'b');
+    plot([0 0],[-4 4],'b');
+end
+
+% Save plot
+if savePlots == 1
+    saveas(gcf,'plots/3.2-qampath.png');
+end
 
 % e) ----------------------------------------------------------------------
+% <insert text here>
 
-% 3.3 ---------------------------------------------------------------------
+%% 3.3 ---------------------------------------------------------------------
+
+
+
